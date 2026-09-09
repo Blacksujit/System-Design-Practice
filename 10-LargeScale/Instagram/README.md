@@ -1,129 +1,207 @@
-# Instagram/Photo Sharing - System Design
+# Instagram / Photo Sharing - System Design
 
 ## Requirements
 
 ### Functional Requirements
 - Upload photos/videos
-- View feed (chronological or algorithmic)
-- Follow users
-- Like, comment on posts
-- Stories feature
-- Search users and hashtags
+- Feed generation (follow users)
+- Likes and comments
+- Direct messages
+- Stories (24-hour expiring content)
+- Search (people, tags, locations)
 
 ### Non-Functional Requirements
-- High availability
-- Low latency feed generation
-- Scalability (1B+ users)
-- Media storage efficiency
+- Feed load latency < 200ms
+- Availability > 99.9%
+- Media durability (never lose a photo)
+- Read-heavy (10:1 read:write)
+- Eventually consistent (feed)
 
 ## Capacity Estimation
 
-- **Users**: 1B monthly active
-- **Daily uploads**: 100M photos
-- **Storage**: 100M * 2MB = 200TB/day
-- **Feed reads**: 500K QPS
+- **DAU**: 500M active users
+- **Photos/day**: 100M uploads
+- **Feed reads/day**: 2B (4 posts/user/day)
+- **Photo size**: 500KB avg (compressed)
+- **Storage**: 100M * 500KB = 50TB/day new media
+- **Feed QPS**: 2B/86400 ≈ 23K QPS reads
 
 ## High-Level Design
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│     Client      │────▶│  API Gateway    │────▶│  Load Balancer  │
-└─────────────────┘     └─────────────────┘     └────────┬────────┘
-                                                         │
-                    ┌────────────────────────────────────┬┴───────────────────┐
-                    │                                    │                    │
-             ┌──────▼──────┐                    ┌───────▼───────┐    ┌───────▼──────┐
-             │ Upload Service│                   │  Feed Service │    │Search Service│
-             └──────┬──────┘                    └───────┬───────┘    └──────┬───────┘
-                    │                                    │                    │
-             ┌──────▼──────┐                    ┌───────▼───────┐    ┌───────▼──────┐
-             │     S3      │                    │    Redis      │    │ Elasticsearch│
-             └─────────────┘                    └───────────────┘    └──────────────┘
+┌─────────┐
+│  Client │
+└────┬────┘
+     │
+┌────▼────┐   ┌────────────┐
+│  CDN    │   │  LB        │
+└────┬────┘   └─────┬──────┘
+     │              │
+     └──────┬───────┘
+            │
+   ┌────────▼────────┐
+   │  API Gateway    │
+   └───┬────────┬────┘
+       │        │
+┌──────▼───┐ ┌──▼──────────┐   ┌────────────┐
+│ Photo    │ │ Feed        │   │  Media     │
+│ Service  │ │ Service     │   │  Pipeline  │
+└─────┬────┘ └────┬────────┘   └─────┬──────┘
+      │           │                  │
+┌─────▼─────┐ ┌───▼─────────┐  ┌────▼────────────────────┐
+│ Cassandra │ │ Redis       │  │  Object Storage (S3)    │
+│ (metadata)│ │ (timelines) │  │  + CDN at the edge      │
+└───────────┘ └─────────────┘  └─────────────────────────┘
 ```
 
-## Media Upload Pipeline
+## Photo Upload Flow
 
 ```
-1. Client requests pre-signed S3 URL
-2. Upload directly to S3
-3. Trigger Lambda for processing:
-   a. Generate thumbnails (multiple sizes)
-   b. Extract EXIF data
-   c. Content moderation
-   d. Update search index
-4. Store metadata in database
-5. Notify followers
+1. Client requests pre-signed URL from API
+2. Client uploads directly to S3 (no server bottleneck)
+3. S3 triggers event → Media Pipeline
+4. Pipeline:
+   - Generate sizes (thumbnail, small, medium, large)
+   - Apply compression (WebP/AVIF)
+   - Store originals + processed
+   - Extract EXIF, generate blurhash
+5. Update metadata in Cassandra
+6. Notify Feed Service (fan-out to followers)
 ```
 
-## Image Storage Architecture
-
+### Media Pipeline Components
 ```
-Original Image → S3 (Standard)
-                     │
-        ┌────────────┼────────────┐
-        │            │            │
-   ┌────▼────┐  ┌────▼────┐  ┌────▼────┐
-   │Thumbnail│  │  Medium │  │  Large  │
-   │ 150x150 │  │ 640x640 │  │1080x1080│
-   └─────────┘  └─────────┘  └─────────┘
+S3 Event → Lambda/Worker → 
+  1. Transcode (thumbnail, various resolutions)
+  2. Optimize (format + quality)
+  3. Content Moderation (NSFW / image safety ML)
+  4. Persist to final buckets
+  5. CDN purge/invalidate old keys
 ```
 
-## Feed Generation
+## Feed Generation (Hybrid Fanout)
 
-### Algorithmic Feed
-- Based on user interactions
-- Machine learning model
-- Considers: recency, engagement, relationship
+```
+POST /photos { media_id }
 
-### Chronological Feed
-- Simple timestamp ordering
-- No computation needed
-- Option for users to switch
+    ↘ Log to own timeline
+    ↘ Fan-out to follower timelines (Async via queue)
+
+     Regular user (≤10K followers):
+        ZADD timeline:{follower} now media_id   // pushed
+
+     Celebrity (>10K followers):
+        Store in celebrity feed (fanout-on-read)
+        On feed request: merge pulls from celebs
+```
+
+### Feed Read
+```
+GET /feed?offset=0&limit=20
+
+  1. Redis: ZREVRANGE timeline:{user} 0 19
+  2. Handle pagination
+  3. For recent celebrities: merge their feeds (capability)
+  4. Fetch metadata + pre-signed media URLs
+  5. Serve via API/CDN
+```
 
 ## Database Schema
 
 ```sql
--- Posts Table (Cassandra)
-CREATE TABLE posts (
+-- Media metadata (Cassandra)
+CREATE TABLE media (
+    media_id TIMEUUID,
     user_id BIGINT,
-    post_id TIMEUUID,
-    media_urls LIST<TEXT>,
+    type TEXT,           -- photo, video, reel
     caption TEXT,
+    media_urls MAP<TEXT, TEXT>, -- {thumb, small, medium}
+    dimensions MAP<TEXT, INT>,
     location MAP<TEXT, TEXT>,
     created_at TIMESTAMP,
-    like_count COUNTER,
-    comment_count COUNTER,
-    PRIMARY KEY (user_id, created_at, post_id)
-) WITH CLUSTERING ORDER BY (created_at DESC);
+    PRIMARY KEY (user_id, created_at, media_id)
+);
 
--- User Follows
-CREATE TABLE user_follows (
+-- Follows (Cassandra)
+CREATE TABLE follows (
     user_id BIGINT,
     followee_id BIGINT,
     created_at TIMESTAMP,
     PRIMARY KEY (user_id, followee_id)
 );
 
--- Comments Table
-CREATE TABLE comments (
-    post_id TIMEUUID,
-    comment_id TIMEUUID,
-    user_id BIGINT,
-    content TEXT,
+-- Likes (Cassandra - huge volume)
+CREATE TABLE likes (
+    media_id TIMEUUID,
+    liker_id BIGINT,
     created_at TIMESTAMP,
-    PRIMARY KEY (post_id, created_at, comment_id)
-) WITH CLUSTERING ORDER BY (created_at DESC);
+    PRIMARY KEY (media_id, liker_id)
+);
+
+-- Comments (Cassandra)
+CREATE TABLE comments (
+    media_id TIMEUUID,
+    comment_id UUID,
+    commenter_id BIGINT,
+    text TEXT,
+    created_at TIMESTAMP,
+    PRIMARY KEY (media_id, created_at, comment_id)
+);
+
+-- Stories (24h TTL)
+CREATE TABLE stories (
+    user_id BIGINT,
+    story_id UUID,
+    media_urls MAP<TEXT, TEXT>,
+    expires_at TIMESTAMP,
+    created_at TIMESTAMP,
+    PRIMARY KEY (user_id, expires_at, story_id)
+);
+-- Cassandra TTL(expires_at) auto-deletes
 ```
 
-## CDN Strategy
+## Caching Strategy
 
-- Use CloudFront for media delivery
-- Edge caching for popular content
-- Regional distribution
-- Token-based authentication for private content
+| Cache | What | TTL |
+|-------|------|-----|
+| Redis | Timeline (sorted sets) | 30min |
+| Redis | User profile | 1hr |
+| Redis | Media metadata | 5min |
+| CDN | Media files | 30 days (long cache) |
+| CDN | Pre-signed URLs | 60s |
+
+**Note**: Media CDN caching is critical - 90% of feed bytes are images.
+
+## Analytics & Scaling
+
+### Sharding
+- Shard by `user_id` for media/follows
+- Shard by `media_id` for likes/comments
+- `storage:writing content`
+
+### Hot Users Problem
+- Celebrity posting → thundering herd on followers' timelines
+- Solution: cap fanout (only push top-N), else pull merge
+
+## Search (Optional)
+
+```
+Metadata → Kafka → Elasticsearch index (users, tags, locations, captions)
+Query → ES → Return user IDs → Join with media → Serve
+```
+
+## Interview Talking Points
+
+1. **Why direct-to-S3 upload?** Removes bottleneck, scale-out
+2. **Why Cassandra?** Write-heavy with time-ordered data
+3. **Hybrid fanout**: push + pull, celebrity lists
+4. **CDN-first**: static + media delivery
+5. **Stories TTL**: automatic cleanup, no cron jobs
+6. **Content moderation**: pipeline before publish
 
 ## Resources
 
-- [Instagram Architecture](https://www.instagram.com engineering/)
-- [How Instagram Scales](https://medium.com/@buckhx/unwiedling-instagram-s-e4773fd31d2d)
-- [System Design Interview - Alex Xu](https://www.amazon.com/System-Design-Interview-insiders-Second/dp/B08CMF2CQF)
+- [Instagram Engineering](https://engineering.instagram.com/)
+- [A Brief History of Scaling @lfeng (Instagram)](https://instagram-engineering.com/a-brief-history-of-scaling-instagram-3dd604e2a75b)
+- [Designing Instagram - Educative](https://www.educative.io/courses/system-design-interview)
+- [How Instagram Feeds Work](https://help.instagram.com/198700464370908)

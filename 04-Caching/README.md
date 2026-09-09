@@ -107,5 +107,5 @@ Caching is storing frequently accessed data in a temporary storage layer to redu
 
 - [Redis Documentation](https://redis.io/docs/)
 - [Caching Patterns](https://martinfowler.com/)
-- [High Performance Browser Networking](https://hpbnwhttp://smouset.com/)
+- [High Performance Browser Networking](https://hpbn.co/)
 - [Caching at Reddit](https://redditblog.com/2017/01/17/caching-at-reddit/)

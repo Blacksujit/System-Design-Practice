@@ -3,165 +3,189 @@
 ## Requirements
 
 ### Functional Requirements
-- Crawl billions of web pages
-- Extract links and content
-- Respect robots.txt
-- Handle duplicate URLs
-- Politeness (rate limiting)
+- Crawl the entire web (billions of pages)
+- Extract content (HTML → structured data)
+- Handle dynamic pages (JS-rendered)
+- Deduplicate identical content
+- Respect `robots.txt`
+- Prioritize important URLs
+- Refresh content periodically
 
 ### Non-Functional Requirements
-- Scalability (billions of pages)
-- Fault tolerance
-- Distributed crawling
-- Content freshness
-
-## Capacity Estimation
-
-- **Pages to crawl**: 1 billion pages
-- **Page size**: 500KB average
-- **Total storage**: 500TB
-- **Crawl rate**: 1000 pages/second = 86M pages/day
+- Throughput: 50M pages/day minimum
+- Politeness (1 request every 10-20s per host)
+- Availability: 99.9%+ (crawl must be reliable)
+- Scalability: add crawler nodes horizontally
+- Robust to failures, retries, and network flakiness
 
 ## High-Level Design
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Seed URLs     │────▶│  URL Frontier   │────▶│  Crawler Worker │
-└─────────────────┘     └─────────────────┘     └────────┬────────┘
-                                                         │
-                    ┌────────────────────────────────────┬┴───────────────────┐
-                    │                                    │                    │
-             ┌──────▼──────┐                    ┌───────▼───────┐    ┌───────▼──────┐
-             │   Content   │                    │    DNS        │    │   Robots.txt │
-             │   Parser    │                    │   Resolver    │    │   Checker    │
-             └──────┬──────┘                    └───────────────┘    └──────────────┘
-                    │
-             ┌──────▼──────┐
-             │  Document   │
-             │   Storage   │
-             └─────────────┘
+┌──────────────┐
+│ URL Frontier │   priorities + host queues (Redis/)
+└──────┬───────┘
+       │
+┌──────▼───────┐
+│ Crawler      │   fetch robots.txt, respect delays
+│ Nodes        │
+└──────┬───────┘
+       │
+┌──────▼───────┐
+│ HTML Parser  │   extract links, text, metadata, canonical
+└──────┬───────┘
+       │
+┌──────▼────────┐   ┌─────────────────┐
+│ Link/Normalize│──▶│ URL Dedupe      │  (Bloom filter set)
+└──────┬────────┘   └────────┬────────┘
+       │                     │
+┌──────▼────────┐   ┌────────▼─────────┐
+│ Content Store │   │  URL Frontier    │  (re-enqueue new URLs)
+│ (S3 / HDFS)   │   └──────────────────┘
+└──────┬────────┘
+       │
+┌──────▼────────┐
+│ Indexer       │ → Elasticsearch / search index
+└───────────────┘
 ```
 
-## URL Frontier
+## Components in Detail
 
-Priority queue of URLs to crawl.
-
-### Components
-1. **Priority Controller**: Rank URLs by importance
-2. **DNS Resolver**: Cache DNS lookups
-3. **Robots.txt Parser**: Respect crawl rules
-4. **Politeness Controller**: Rate limit per domain
-
-### Priority Rules
-- Homepage before subpages
-- Fresh content over stale
-- Important domains first
-- Recently updated pages
-
-## Crawl Flow
-
+### 1. URL Frontier (Design is key)
 ```
-1. Pop URL from frontier
-2. Check robots.txt cache
-3. If allowed, resolve DNS
-4. Fetch page content
-5. Parse HTML, extract:
-   - Links
-   - Content
-   - Metadata
-6. Store content
-7. Add new URLs to frontier
-8. Mark URL as visited
+Must support:
+  - Prioritization: News > Snapshot ≈ Domain rank > Fresh (age)
+  - Host politeness: per-host queue (limit fetch rate)
+  - Avoid duplicate fetching
+  - Handle redirects and URL canonicalization
+
+Implementation:
+  - Redis sorted sets: priority queues
+  - Per-host quota via token buckets
+  - Persistent frontier (survive restarts)
 ```
 
-## Politeness
+### 2. Fetching Node
 
-### Rate Limiting
-- Max requests per domain per second
-- Random delay between requests
-- Respect crawl-delay directive
-
-### Implementation
-```python
-class PolitenessController:
-    def __init__(self):
-        self.domain_last_access = {}
-        self.min_delay = 1  # seconds
-    
-    def can_fetch(self, domain):
-        last = self.domain_last_access.get(domain, 0)
-        if time.time() - last >= self.min_delay:
-            return True
-        return False
-    
-    def mark_accessed(self, domain):
-        self.domain_last_access[domain] = time.time()
+```
+Sequence per URL:
+  1. Check robots.txt (cached per host, honor crawl-delay)
+  2. Optional proxy pool (avoid IP bans)
+  3. HTTP GET with timeouts (e.g., connect 10s, read 30s)
+  4. Validate status (200ok, 301→follow redirect, 410→stop)
+  5. Validate content-type (HTML, feed, image, PDF)
+  6. Enforce size cap (e.g., max 2MB)
+  7. Store raw + metadata (headers, timestamps, fetch result)
 ```
 
-## Duplicate Detection
+### 3. Parsing & Normalization
 
-### URL Deduplication
-- Bloom filter for URL seen set
-- Low memory footprint
-- False positives acceptable
+```
+Parse:
+  - Extract <link>, <a>, srcset, canonical, title, meta, og tags
+  - Extract structured data (JSON-LD, microdata)
+  - Text extraction (tags removed, whitespace normalized)
+  - Detect language
 
-### Content Deduplication
-- SimHash for near-duplicate detection
-- Store content fingerprints
-- Compare fingerprints before storage
-
-## Database Schema
-
-```sql
--- URLs Table (Cassandra)
-CREATE TABLE urls (
-    url_hash BIGINT PRIMARY KEY,
-    url TEXT,
-    domain VARCHAR(255),
-    first_seen TIMESTAMP,
-    last_crawled TIMESTAMP,
-    crawl_count INT,
-    priority INT
-);
-
--- Pages Table
-CREATE TABLE pages (
-    url_hash BIGINT PRIMARY KEY,
-    content TEXT,
-    links LIST<TEXT>,
-    metadata MAP<TEXT, TEXT>,
-    crawled_at TIMESTAMP
-);
-
--- Domain Politeness Table
-CREATE TABLE domain_politeness (
-    domain VARCHAR(255) PRIMARY KEY,
-    robots_txt TEXT,
-    crawl_delay INT,
-    last_access TIMESTAMP
-);
+Normalize URL:
+  - Remove fragments (#), trailing slash, default ports
+  - www vs non-www (choose canonical)
+  - Case-normalize path, resolve relative to absolute
+  - Strip tracking params (?utm_, &fbclid) unless required
 ```
 
-## Distributed Architecture
+### 4. Deduplication
 
-### Coordinator
-- Assigns work to crawlers
-- Monitors crawler health
-- Handles failover
+```
+Why: The web has massive duplication (shingles, boilerplates, CDNs, mirrors).
 
-### Crawlers
-- Fetch and parse pages
-- Report back to coordinator
-- Run in parallel
+Approaches:
+  - SimHash / MinHash for near-duplicate content
+  - Content hash (SHA-256 of normalized text)
+  - URL set (Bloom filter + Redis) to avoid refetching
 
-### Storage
-- Store crawled content
-- Index for search
-- Deduplication
+Politeness + quality: keep one canonical, dedupe others.
+```
+
+### 5. Content Store
+
+```
+- Raw HTML + URL → object storage (S3/parquet, partitioned by crawled_date)
+- Processed structs → columnar store
+- Live index → Elasticsearch (title, text, URL, dates, language)
+- Snapshot history for freshness/re-crawl comparisons
+```
+
+### 6. Politeness & Ethical Crawling
+
+```
+- Robots.txt: parse and honor per host
+- Crawl-delay: min 1 request per N seconds per host (10-20s typical)
+- Never hammer same host
+- Throttle per country / IP segment to avoid bans
+- Respect rate limits, optional listen to sitemaps (fast + sanctioned)
+- Include Crawler identity in User-Agent
+```
+
+## Priority Handling (Popular vs Fresh)
+
+```
+Priority score = 
+  0.8 * domain_rank (PageRank-like, recency-weighted)
+  + 0.15 * link_popularity (incoming links)
+  + 0.05 * freshness_boost (recently changed / breaking news)
+```
+
+Needs a priority queue scheduler (e.g., Kafka or Redis ZSET) with re-crawl cycles for high-value pages.
+
+## Refresh Policy
+
+```
+- News sites: re-crawl every few minutes
+- Blogs: hourly
+- Static docs: daily
+- Long-tail pages: weekly/monthly
+
+Track last_crawled_at, content_hash, change detection.
+```
+
+## Scaling the Crawler
+
+| Component | Scale method |
+|-----------|--------------|
+| Frontier | Shard by host-hash → distribute queues |
+| Fetch nodes | Horizontal (stateless workers, pull from queue) |
+| Parser | In-place on workers or separate pool |
+| Dedup | Bloom filter in fast cache; periodic sync |
+| Store | Object storage (S3) + partition by date |
+
+```
+Crawl rate = workers * req/min/worker
+For 50M pages/day + 2-min cycle → ~35K requests/sec → ~1,400 workers.
+```
+
+## Failure Handling
+
+| Failure | Mitigation |
+|---------|-----------|
+| Timeout / connection reset | Retry with exponential backoff (max 3) |
+| HTTP 500/503 | Retry later (respect Retry-After header) |
+| Encoding errors | Detect via charset, fallback to control stream |
+| Throttled (429) | Back off per host, distribute across proxies |
+| Crawler crash mid-batch | Frontier is durable; re-crawl from checkpoint |
+
+## Interview Talking Points
+
+1. **URL frontier is the heart**: prioritize + politeness + dedup
+2. **Robots.txt first**: ethical crawl, low ban risk
+3. **Bloom filter dedup**: memory-efficient, false positives acceptable
+4. **Edge caching**: robots.txt cache per host
+5. **Pipeline isolation**: fetch/parse/store/components scale independently
+6. **Recency tracking**: change-rate adaptive re-fetch
 
 ## Resources
 
-- [Web Crawler Architecture](https://en.wikipedia.org/wiki/Web_crawler)
-- [Nutch Crawler](https://nutch.apache.org/)
-- [Scrapy Framework](https://scrapy.org/)
-- [System Design Interview - Alex Xu](https://www.amazon.com/System-Design-Interview-insiders-Second/dp/B08CMF2CQF)
+- [The Anatomy of a Large-Scale Hypertextual Web Search Engine (Google/Brin)](https://infolab.stanford.edu/~backrub/google.html)
+- [W3C Robots.txt Spec](https://www.rfc-editor.org/rfc/rfc9309)
+- [Scrapy (Python crawler framework)](https://scrapy.org/)
+- [Apache Nutch (Hadoop-based crawler)](https://nutch.apache.org/)
+- [Crawler design - MIT 6.824 / TJBot](https://pdos.csail.mit.edu/6.824/)
