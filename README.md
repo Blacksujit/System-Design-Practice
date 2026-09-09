@@ -2,8 +2,18 @@
 
 > A comprehensive, structured approach to mastering system design from fundamentals to advanced distributed systems.
 
+## 🎯 START HERE — Your Interview Prep Strategy
+
+**If you're interviewing and short on time, your #1 file is the Master Study Plan.**
+
+- **[MASTER-PLAN.md](./MASTER-PLAN.md)** — the "start tomorrow" strategy: day-by-day timeline, daily routine, estimation numbers to memorize, where to practice, frequent-question priority bank, mock cadence, and interview-day playbook.
+- **[PRACTICE.md](./PRACTICE.md)** — 16 practice problems by difficulty with what to iterate on.
+- **[PROJECTS.md](./PROJECTS.md)** — 10 hands-on build projects to learn by doing.
+- **[12-InterviewPrep/](./12-InterviewPrep/)** — the 4-step interview framework, practice platforms, FAQ bank, and self-scoring rubric.
+
 ## Table of Contents
 
+- [Master Study Plan → READ FIRST](./MASTER-PLAN.md)
 - [Study Roadmap](#study-roadmap)
 - [How to Use This Repository](#how-to-use-this-repository)
 - [Weekly Schedule Template](#weekly-schedule-template)
