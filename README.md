@@ -1,0 +1,72 @@
+# System Design Mastery - Complete Study Plan
+
+> A comprehensive, structured approach to mastering system design from fundamentals to advanced distributed systems.
+
+## Table of Contents
+
+- [Study Roadmap](#study-roadmap)
+- [How to Use This Repository](#how-to-use-this-repository)
+- [Weekly Schedule Template](#weekly-schedule-template)
+
+---
+
+## Study Roadmap
+
+### Phase 1: Fundamentals (Weeks 1-4)
+- [ ] [Fundamentals - Basics](./01-Fundamentals/)
+- [ ] [Networking & Protocols](./02-Networking/)
+- [ ] [Databases & Storage](./03-Databases/)
+- [ ] [Caching Strategies](./04-Caching/)
+
+### Phase 2: Core Concepts (Weeks 5-8)
+- [ ] [Load Balancing & Proxies](./05-LoadBalancing/)
+- [ ] [Message Queues & Streaming](./06-MessageQueues/)
+- [ ] [Consistent Hashing & Partitioning](./07-ConsistentHashing/)
+- [ ] [CAP Theorem & Consistency](./08-CAPTheorem/)
+
+### Phase 3: Design Patterns (Weeks 9-12)
+- [ ] [URL Shortener](./09-Projects/URL-Shortener/)
+- [ ] [Rate Limiter](./09-Projects/Rate-Limiter/)
+- [ ] [Notification System](./09-Projects/Notification-System/)
+- [ ] [Chat System](./09-Projects/Chat-System/)
+
+### Phase 4: Large-Scale Systems (Weeks 13-16)
+- [ ] [URL Shortener Deep Dive](./10-LargeScale/URL-Shortener/)
+- [ ] [Twitter/News Feed](./10-LargeScale/Twitter-Feed/)
+- [ ] [Instagram/Photo Sharing](./10-LargeScale/Instagram/)
+- [ ] [YouTube/Video Streaming](./10-LargeScale/YouTube/)
+
+### Phase 5: Advanced Topics (Weeks 17-20)
+- [ ] [Design Twitter Clone](./11-Advanced/Twitter-Clone/)
+- [ ] [Google Docs/Real-time Collaboration](./11-Advanced/Google-Docs/)
+- [ ] [Google Maps/Location Service](./11-Advanced/Google-Maps/)
+- [ ] [Web Crawler](./11-Advanced/Web-Crawler/)
+
+### Phase 6: Interview Prep (Weeks 21-24)
+- [ ] [Mock Interview Framework](./12-InterviewPrep/)
+- [ ] [Common Mistakes & Solutions](./12-InterviewPrep/Common-Mistakes/)
+- [ ] [Communication Techniques](./12-InterviewPrep/Communication/)
+
+---
+
+## How to Use This Repository
+
+1. **Follow the roadmap** sequentially - each phase builds on the previous
+2. **Read the notes** for each topic before attempting practice problems
+3. **Complete projects** - hands-on implementation solidifies understanding
+4. **Track progress** using the TODO.md file
+5. **Review and revise** - revisit completed topics regularly
+
+---
+
+## Contributing
+
+Feel free to add more resources, notes, or projects. Each directory should contain:
+- `README.md` - Topic overview and key concepts
+- `notes.md` - Detailed notes and explanations
+- `practice.md` - Practice questions and problems
+- `implementation/` - Code examples and projects (where applicable)
+
+---
+
+*Last Updated: September 2026*
