@@ -147,9 +147,9 @@ description: The complete, open-source system design study plan with interview p
 
 ## Start here
 
-- [**Master Plan** — the full strategy, day-by-day](../master-plan) → read this first
-- [Practice Problems](../practice) — 16 problems by tier
-- [Build Projects](../build-projects) — 10 hands-on projects
+- [**Master Plan** — the full strategy, day-by-day](https://blacksujit.github.io/System-Design-Practice/master-plan) → read this first
+- [Practice Problems](https://blacksujit.github.io/System-Design-Practice/practice) — 16 problems by tier
+- [Build Projects](https://blacksujit.github.io/System-Design-Practice/build-projects) — 10 hands-on projects
 
 ## The 6 phases
 

@@ -230,7 +230,7 @@ When interviewer says | It means
 
 ## Resources
 
-- [Master Study Plan (start here)](../MASTER-PLAN.md)
+- [Master Study Plan (start here)](https://blacksujit.github.io/System-Design-Practice/master-plan)
 - [System Design Interview - Alex Xu](https://www.amazon.com/System-Design-Interview-insiders-Second/dp/B08CMF2CQF)
 - [Pramp Free Mock Interviews](https://www.pramp.com/)
 - [Interviewing.io](https://interviewing.io/)

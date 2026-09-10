@@ -8,3 +8,5 @@ site/src/content/docs/
 .DS_Store
 *.local
 .env
+.playwright-mcp/
+
