@@ -161,6 +161,16 @@ description: The complete, open-source system design study plan with interview p
 6. **Interview** — framework, practice platforms, FAQ bank
 
 Browse the sidebar for every topic. Every page is freely editable via GitHub.
+
+## Support this project 💙
+
+This entire course is **free and open source** — notes, practice, and projects are all in the repo.
+
+If it helped you land a job, pass an interview, or level up, you can buy the **premium edition** on Gumroad as a one-time donation (lifetime updates, same content, extra convenience):
+
+[**Buy System Design Mastery — Complete Interview Prep**](https://nirmalsujit.gumroad.com/l/system-design-mastery) — $49 one-time
+
+Every purchase directly supports keeping this project free and improving it.
 `;
   writeFileSync(path.join(OUT, 'index.md'), home, 'utf8');
 

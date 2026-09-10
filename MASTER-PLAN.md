@@ -279,3 +279,9 @@ POLISH
 > Reading this repo makes you *informed*. Designing out loud to a timer, getting mocked, and fixing gaps makes you *hired*. **Track B and C are the plan.** Everything else is fuel.
 
 Good luck. Start with Day 1. Tomorrow.
+---
+
+## 13. Support This Plan
+
+This course is free and open source. If this plan helped you land an offer, the best way to say thanks (and keep it free) is to [**buy the premium edition on Gumroad**](https://nirmalsujit.gumroad.com/l/system-design-mastery) — \ one-time, lifetime updates, same content. Every sale funds more free content.
+

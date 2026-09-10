@@ -2,6 +2,12 @@
 
 > A comprehensive, structured approach to mastering system design from fundamentals to advanced distributed systems.
 
+## 📖 Live Docs Site
+
+This repo is published as a browsable docs site: **[System Design Mastery →](https://blacksujit.github.io/System-Design-Practice/)**. Auto-deploys from every push.
+
+**❤️ Found this useful?** The course is 100% free and open source. If it helped you pass an interview, you can [**buy the premium edition on Gumroad**](https://nirmalsujit.gumroad.com/l/system-design-mastery) ($49 one-time, lifetime updates) — a donation that directly supports keeping this project free.
+
 ## 🎯 START HERE — Your Interview Prep Strategy
 
 **If you're interviewing and short on time, your #1 file is the Master Study Plan.**
