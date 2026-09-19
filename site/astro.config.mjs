@@ -2,8 +2,8 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-  site: 'https://blacksujit.github.io',
-  base: '/System-Design-Practice',
+  site: 'https://system.sujit.top',
+  base: '/',
   integrations: [
     starlight({
       title: 'System Design Mastery',
